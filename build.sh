@@ -33,23 +33,14 @@ WSL_ROOT_DIR__="%LocalAppData%\\Packages\\CanonicalGroupLimited.UbuntuonWindows_
 WSL_ROOT_DIR1804__="%LocalAppData%\\Packages\\CanonicalGroupLimited.Ubuntu18.04onWindows_79rhkp1fndgsc\\LocalState\\rootfs"
 
 
-EOSIO_SHARED_MEMORY_SIZE_MB__=100
-CMAKE_VERBOSE__=0
-
 
 TIME_BEGIN=$( date -u +%s )
   
 pyteos="pyteos"
 tests="tests"
-library_dir="teos/teos_lib"
-source_dir="teos"
-build_dir="build"
 contracts="contracts"
-teos_exe="teos/build/teos/teos"
-config_json="teos/config.json"
 
 EOSIO_EOSFACTORY_DIR__="$PWD"
-BUILD_DIR="${EOSIO_EOSFACTORY_DIR__}/$build_dir"
 EOSIO_CONTRACT_WORKSPACE__=$EOSIO_CONTRACT_WORKSPACE
 
 IS_WSL="" # Windows Subsystem Linux
@@ -109,7 +100,6 @@ and Darwin."
 fi
 
 source scripts/${OS_NAME}.sh
-setCompilersAndDependencies # Sets operating system parameters
 
 ##############################################################################
 # Command-line modification of the parameters.
@@ -121,22 +111,13 @@ Usage: ./build.sh [OPTIONS]
     -e  EOSIO repository dir. Default is env. variable EOSIO_SOURCE_DIR.
     -w  Workspace directory: where are your contracts. 
             Default is $EOSIO_CONTRACT_WORKSPACE__
-    -c  compiler, 'gnu' or 'clang'. Default is 'clang'.
-    -C  C compiler path. Default is the system default.
-    -X  C++ compiler path. Default is the system default.
-    -i  ECC implementation: 'secp256k1' or 'openssl' or 'mixed'. 
-            Default is 'secp256k1'.
-    -t  Build type: 'Debug' or 'Release'. Default is 'Release'.
-    -r  Reset the build.
-    -s  EOSIO node shared memory size (in MB). Default is 100 
     -o  Path to the Windows WSL root, if applicable. Default is 
             $WSL_ROOT_DIR__ or $WSL_ROOT_DIR1804__
-    -v  CMake verbose. Default is OFF.
     -h  this message.
 "
 }
 
-while getopts ":e:w:c:C:X:i:t:s:rvh" opt; do
+while getopts ":e:w:o:h" opt; do
   case $opt in
     e)
         EOSIO_SOURCE_DIR__=$OPTARG
@@ -144,63 +125,17 @@ while getopts ":e:w:c:C:X:i:t:s:rvh" opt; do
     w)
         EOSIO_CONTRACT_WORKSPACE__=$OPTARG
         ;;
-    c)
-        compiler="$OPTARG"
-        if [[ ! "$compiler" =~ (gnu|clang)$ ]]; then
-            usage
-            exit -1
-        fi    
-        if [ "$compiler" == "gnu" ]; then
-            CXX_COMPILER__=g++
-            C_COMPILER__=gcc
-        fi          
-        ;;
-    C)  
-        C_COMPILER__=$OPTARG
-        ;;
-    X)
-        CXX_COMPILER__=$OPTARG
-        ;;
-    i)  
-        ECC_IMPL__="$OPTARG"
-        if [[ ! "$ECC_IMPL__" =~ (secp256k1|openssl|mixed)$ ]]; then
-            usage
-            exit -1
-        fi
-        ;;
-
-    t) 
-        BUILD_TYPE__="$OPTARG"
-        if [[ ! "$BUILD_TYPE__" =~(Debug|Release)$ ]]; then
-            usage
-            exit -1        
-        fi
-        ;;
-
-    s)
-        EOSIO_SHARED_MEMORY_SIZE_MB__="$OPTARG"
-        ;;
-
-    r)
-        RESET__=RESET
-        ;;
-
     o) 
         WSL_ROOT_DIR__="$OPTARG"
-        ;;
-    v)
-        CMAKE_VERBOSE__=1
         ;;
     h)
         usage
         exit 0
         ;;
-        
     \?)
         printf "Invalid option: -$OPTARG"
         exit -1
         ;;
-
     :)
         printf "Option -$OPTARG requires an argument."
         exit -1
@@ -208,20 +143,13 @@ while getopts ":e:w:c:C:X:i:t:s:rvh" opt; do
   esac
 done
 
-printf "%s" "
-Operating system: $OS_NAME
-"
 if [ ! -z "$IS_WSL" ]; then
     printf "%s\n" "Windows Subsystem Linux detected"
 fi
 printf "%s\n" "
 Arguments:
     EOSIO_SOURCE_DIR__=$EOSIO_SOURCE_DIR__
-    CXX_COMPILER__=$CXX_COMPILER__
-    C_COMPILER__=$C_COMPILER__
-    BUILD_TYPE__=$BUILD_TYPE__
-    ECC_IMPL__=$ECC_IMPL__
-    RESET__=$RESET__
+    EOSIO_CONTRACT_WORKSPACE__=$EOSIO_CONTRACT_WORKSPACE__
 "
 
 ##############################################################################
@@ -267,10 +195,7 @@ printf "%s\n" "Sets environment variables, if not set already:"
 
 setLinuxVariable "EOSIO_SOURCE_DIR" "$EOSIO_SOURCE_DIR__"
 setLinuxVariable "EOSIO_EOSFACTORY_DIR" "$EOSIO_EOSFACTORY_DIR__"
-setLinuxVariable "EOSIO_SHARED_MEMORY_SIZE_MB" "$EOSIO_SHARED_MEMORY_SIZE_MB__"
 setLinuxVariable "U_HOME" "$HOME"
-
-setLinuxVariable "eosf" "$EOSIO_EOSFACTORY_DIR__/$teos_exe"
 
 if [ -z $EOSIO_CONTRACT_WORKSPACE__ ]; then
     EOSIO_CONTRACT_WORKSPACE__="${EOSIO_EOSFACTORY_DIR__}/$contracts"
@@ -300,7 +225,6 @@ if [ ! -z "$IS_WSL" ]; then
     fi
 
     setWindowsVariable "EOSIO_CONTRACT_WORKSPACE" "$EOSIO_CONTRACT_WORKSPACE__"
-    setWindowsVariable "eosf" "$EOSIO_EOSFACTORY_DIR__/$teos_exe"
 
     retval=""
     wslMapLinux2Windows retval $EOSIO_EOSFACTORY_DIR__
@@ -383,9 +307,6 @@ if [ ! -z "$IS_WSL" ]; then
     fi 
 fi
 
-if [ -z "$CMAKE" ]; then
-    CMAKE=$( which cmake )
-fi
 
 if [ -z "$EOSIO_SOURCE_DIR" ]; then
     printf "\n%s" "
@@ -400,6 +321,8 @@ if [ -z "$EOSIO_SOURCE_DIR" ]; then
     exit -1
 fi
 
+BUILD_DIR="${EOSIO_EOSFACTORY_DIR__}/build"
+
 ##########################################################################
 # Make the file structure
 ##########################################################################
@@ -408,25 +331,22 @@ printf "%s" "
 "
 printf "%s" "
 Makes the file structure:
-
     ${EOSIO_EOSFACTORY_DIR__}  # eosfactory repository
         ${BUILD_DIR}  # binary dir
             daemon  # local EOSIO node documents
                 data-dir  # the EOSIO node data-dir
-                    wallet  # local wallets
                     genesis.json
                     config.in
 "
 
 cd ${EOSIO_EOSFACTORY_DIR__}
 mkdir -p ${BUILD_DIR}
-mkdir -p ${BUILD_DIR}/daemon/data-dir/wallet
+mkdir -p ${BUILD_DIR}/daemon/data-dir
 
 cp ${EOSIO_EOSFACTORY_DIR__}/resources/genesis.json \
     ${BUILD_DIR}/daemon/data-dir/genesis.json
 cp ${EOSIO_EOSFACTORY_DIR__}/resources/config.ini \
     ${BUILD_DIR}/daemon/data-dir/config.ini
-
 
 ##########################################################################
 # Is EOSIO_SOURCE_DIR set?
@@ -459,25 +379,6 @@ if [ ! -z "$RESET__" ]; then
     rm -r *
 fi
 
-printf "\n%s\n" "Compiling ${source_dir}. Current directory is ${PWD}"
-
-$CMAKE -DCMAKE_BUILD_TYPE=${BUILD_TYPE__} \
-    -DCMAKE_CXX_COMPILER=${CXX_COMPILER__} \
-    -DCMAKE_C_COMPILER=${C_COMPILER__} -DECC_IMPL=$ECC_IMPL__ ..
-
-if [ $? -ne 0 ]; then
-    printf "\n\t%s\n\n" \
-        ">> CMAKE building ${source_dir} has exited with the above error."
-    exit -1
-fi
-
-make VERBOSE="$CMAKE_VERBOSE__"
-
-if [ $? -ne 0 ]; then
-    printf "\n\t%s\n" \
-    ">> MAKE building ${source_dir} has exited with the above error."
-    exit -1
-fi
 
 ##############################################################################
 # finishing
@@ -546,7 +447,7 @@ To verify EOSFactory installation navigate to the 'eosfactory' folder and run
 these tests:
 "
 printf "%s\n" "    
-    $ python3 ./tests/unittest1.py
-    $ python3 ./tests/unittest2.py
-    $ python3 ./tests/unittest3.py
+    $ python3 tests/01_hello_world.py
+    $ python3 tests/02_eosio_token.py
+    $ python3 tests/03_tic_tac_toe.py
 "
